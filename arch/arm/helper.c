@@ -566,6 +566,9 @@ void cpu_reset(CPUState *env)
     uint32_t id = env->cp15.c0_cpuid;
     uint32_t number_of_mpu_regions = env->number_of_mpu_regions;
 #ifdef TARGET_PROTO_ARM_M
+    /* Configured once at construction, but stored before CPU_COMMON, so the memset below would
+     * zero it, and IRQ 0 is a valid line: an FPU exception after any reset would pend it. */
+    int32_t fpu_interrupt_irq_number = env->vfp.fpu_interrupt_irq_number;
     bool was_locked_up = env->v7m.locked_up;
     uint32_t number_of_idau_regions = env->number_of_idau_regions;
     uint32_t number_of_sau_regions = env->number_of_sau_regions;
@@ -576,6 +579,7 @@ void cpu_reset(CPUState *env)
     }
     env->number_of_mpu_regions = number_of_mpu_regions;
 #ifdef TARGET_PROTO_ARM_M
+    env->vfp.fpu_interrupt_irq_number = fpu_interrupt_irq_number;
     env->number_of_idau_regions = number_of_idau_regions;
     env->number_of_sau_regions = number_of_sau_regions;
     if(was_locked_up) {
