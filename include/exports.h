@@ -21,6 +21,7 @@ uint64_t tlib_get_executed_instructions(void);
 void tlib_reset(void);
 int32_t tlib_execute(uint32_t max_insns);
 void tlib_request_translation_block_interrupt(int);
+void tlib_raise_sysbus_access_fault(int, uint64_t);
 void tlib_try_interrupt_translation_block(void);
 void tlib_set_return_request(void);
 void tlib_set_paused(void);
@@ -117,6 +118,10 @@ void tlib_set_register_value_32(int reg_number, uint32_t value);
 uint64_t tlib_get_register_value_64(int reg_number);
 void tlib_set_register_value_64(int reg_number, uint64_t value);
 #endif
+
+void tlib_raise_bus_fault(uint32_t address, int access_type);
+
+uint64_t tlib_get_bus_fault_address(void);
 
 void tlib_before_save(void *env);
 

@@ -1232,6 +1232,13 @@ void tlib_after_load(void *env)
 
 EXC_VOID_1(tlib_after_load, void *, env)
 
+__attribute__((weak)) void tlib_raise_bus_fault(uint32_t address, int access_type)
+{
+    tlib_abortf("This architecture does not implement the bus fault. Returning -1u as a bus fault address");
+}
+
+EXC_VOID_2(tlib_raise_bus_fault, uint32_t, address, bool, access_type_store)
+
 void tlib_enable_read_cache(uint64_t access_address, uint64_t not_cached_count, uint64_t cached_count)
 {
     configure_read_caching(access_address, not_cached_count, cached_count);
@@ -1245,6 +1252,14 @@ void tlib_enable_write_cache(uint64_t access_address, uint64_t not_cached_count,
 }
 
 EXC_VOID_3(tlib_enable_write_cache, uint64_t, access_address, uint64_t, not_cached_count, uint64_t, cached_count)
+
+__attribute__((weak)) uint64_t tlib_get_bus_fault_address()
+{
+    tlib_printf(LOG_LEVEL_WARNING, "This architecture does not implement the bus fault. Returning -1u as a bus fault address");
+    return -1u;
+}
+
+EXC_INT_0(uint32_t, tlib_get_bus_fault_address)
 
 uint64_t tlib_get_cpu_state_for_memory_transaction(CPUState *env, uint64_t addr, int access_type)
 {

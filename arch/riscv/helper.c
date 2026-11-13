@@ -20,7 +20,9 @@
 
 #include "def-helper.h"
 #include "cpu-common.h"
+#include "cpu_registers.h"
 #include "arch_callbacks.h"
+#include "exports.h"
 
 //  This is used as a part of MISA register, indicating the architecture width.
 #if defined(TARGET_RISCV32)
@@ -32,6 +34,7 @@
 void cpu_reset(CPUState *env)
 {
     int32_t interrupt_mode = env->interrupt_mode;
+    bool pic_fast_interrupt_redirect_enabled = env->pic_fast_interrupt_redirect_enabled;
     int32_t csr_validation_level = env->csr_validation_level;
     int privilege = env->privilege_architecture;
     target_ulong mhartid = env->mhartid;
@@ -49,6 +52,7 @@ void cpu_reset(CPUState *env)
     memset(env, 0, RESET_OFFSET);
 
     env->interrupt_mode = interrupt_mode;
+    env->pic_fast_interrupt_redirect_enabled = pic_fast_interrupt_redirect_enabled;
     env->csr_validation_level = csr_validation_level;
     env->mhartid = mhartid;
     env->privilege_architecture = privilege;
@@ -63,7 +67,6 @@ void cpu_reset(CPUState *env)
     env->clic_interrupt_vectored = 0;
     env->clic_interrupt_level = 0;
     env->clic_interrupt_priv = 0;
-    set_default_nan_mode(1, &env->fp_status);
     set_default_mstatus();
     env->custom_instructions_count = custom_instructions_count;
     memcpy(env->custom_instructions, custom_instructions,
@@ -511,6 +514,7 @@ void do_interrupt(CPUState *env)
     target_ulong bit = 0;
     uint8_t is_interrupt = 0;
     uint8_t is_in_clic_mode = cpu_in_clic_mode(env);
+    bool is_in_pic_fast_interrupt_redirect_mode = env->pic_fast_interrupt_redirect_enabled;
 
     if(env->exception_index & (RISCV_EXCP_INT_FLAG)) {
         /* hacky for now. the MSB (bit 63) indicates interrupt but cs->exception
@@ -586,6 +590,11 @@ void do_interrupt(CPUState *env)
                 /* CLIC mode exception or shv non-vectored interrupt */
                 env->pc = env->mtvec & ~MTVEC_MODE_SUBMODE;
             }
+        } else if(is_in_pic_fast_interrupt_redirect_mode && bit == IRQ_VEER_PIC_MEI) {
+            //  in fast interrupt redirect mode mtvec lookup is bypassed
+            tlib_pic_fast_interrupt_capture();
+            target_ulong meihap = tlib_read_csr(CSR_VEER_MEIHAP);
+            env->pc = ldp_phys(meihap);
         } else if(get_field(env->mtvec, MTVEC_MODE) == MTVEC_MODE_CLINT_VECTORED && is_interrupt &&
                   env->privilege_architecture >= RISCV_PRIV1_10) {
             /* CLINT vectored mode */
@@ -731,4 +740,26 @@ void HELPER(handle_post_gpr_access_hook)(uint32_t register_index, uint32_t is_wr
 void HELPER(handle_pre_stack_access_hook)(uint64_t address, uint32_t width, uint32_t is_write)
 {
     tlib_handle_pre_stack_access_hook(address, width, is_write);
+}
+
+void tlib_raise_bus_fault(uint32_t address, int access_type)
+{
+    switch(access_type) {
+        case BUS_FAULT_STORE:
+            cpu->tb_interrupt_exception_from_callback = RISCV_EXCP_STORE_AMO_ACCESS_FAULT;
+            break;
+        case BUS_FAULT_LOAD:
+            cpu->tb_interrupt_exception_from_callback = RISCV_EXCP_LOAD_ACCESS_FAULT;
+            break;
+        default:
+            tlib_abort("Unexpected sysbus fault access type");
+            return;
+    }
+    cpu->badaddr = address;
+    cpu->tb_interrupt_request_from_callback = TB_INTERRUPT_SYNCHRONOUS_EXCEPTION;
+}
+
+uint64_t tlib_get_bus_fault_address()
+{
+    return env->tb_sysbus_access_fault_addr;
 }
